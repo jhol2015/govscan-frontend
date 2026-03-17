@@ -458,10 +458,15 @@ export default function SincronizarPage() {
           ? `Sincronização concluída com ${current.failures.length} falha(s).`
           : 'Sincronização concluída sem falhas.',
       }))
-    } catch {
+    } catch (error) {
       stopPolling()
       await updateProgressSnapshot(portal, ano, logId)
-      setErro('Falha ao sincronizar. Verifique se o backend está disponível.')
+      const reason = error instanceof Error ? error.message : 'UNKNOWN_SYNC_ERROR'
+      setErro(
+        reason === 'SYNC_TIMEOUT'
+          ? 'A sincronização excedeu o tempo da conexão, mas pode continuar no backend. Aguarde alguns instantes e atualize o progresso.'
+          : 'Falha ao sincronizar. Verifique se o backend está disponível.'
+      )
 
       updateLog(logId, current => ({
         ...current,

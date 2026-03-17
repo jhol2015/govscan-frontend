@@ -1,3 +1,4 @@
+import axios from "axios";
 import api from "./api";
 import type { DiarioListResponse, SincronizarResponse } from "../types";
 
@@ -29,10 +30,18 @@ export const diarioService = {
   },
 
   async sincronizar(portal: string, ano: number): Promise<SincronizarResponse> {
-    const { data } = await api.post("/api/v1/diarios/sincronizar", null, {
-      params: { portal, ano },
-    });
-    return data;
+    try {
+      const { data } = await api.post("/api/v1/diarios/sincronizar", null, {
+        params: { portal, ano },
+        timeout: 0,
+      });
+      return data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.code === "ECONNABORTED") {
+        throw new Error("SYNC_TIMEOUT");
+      }
+      throw error;
+    }
   },
 
   async reprocessarFalhas(ids: number[]): Promise<SincronizarResponse> {
