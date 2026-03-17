@@ -14,14 +14,20 @@ export default function DiarioPage() {
 
   const tipos = [...new Set(diarios.map(d => d.tipo))]
 
-  const filtrados = diarios.filter(d => {
-    const matchBusca = busca === '' ||
-      d.edicao.includes(busca) ||
-      d.data_edicao.includes(busca) ||
-      d.tipo.toLowerCase().includes(busca.toLowerCase())
-    const matchTipo = tipoFiltro === '' || d.tipo === tipoFiltro
-    return matchBusca && matchTipo
-  })
+  const filtrados = diarios
+    .filter(d => {
+      const matchBusca = busca === '' ||
+        d.edicao.includes(busca) ||
+        d.data_edicao.includes(busca) ||
+        d.tipo.toLowerCase().includes(busca.toLowerCase())
+      const matchTipo = tipoFiltro === '' || d.tipo === tipoFiltro
+      return matchBusca && matchTipo
+    })
+    .sort((a, b) => {
+      const dataA = new Date(a.data_edicao).getTime()
+      const dataB = new Date(b.data_edicao).getTime()
+      return dataB - dataA
+    })
 
   return (
     <div className="space-y-5">
