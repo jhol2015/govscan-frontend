@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useDiarios } from '../hooks/useDiarios'
 import StatusBadge from '../components/common/StatusBadge'
 import Spinner from '../components/common/Spinner'
@@ -8,11 +8,14 @@ export default function DiarioPage() {
   const { diarios, total, loading, error } = useDiarios()
   const [busca, setBusca] = useState('')
   const [tipoFiltro, setTipoFiltro] = useState('')
+  const [anoFiltro, setAnoFiltro] = useState('')
 
   if (loading) return <Spinner />
   if (error)   return <p className="text-red-500 text-sm">{error}</p>
 
   const tipos = [...new Set(diarios.map(d => d.tipo))]
+  const anos = [...new Set(diarios.map(d => String(new Date(d.data_edicao).getFullYear())))]
+    .sort((a, b) => Number(b) - Number(a))
 
   const filtrados = diarios
     .filter(d => {
@@ -21,8 +24,10 @@ export default function DiarioPage() {
         d.data_edicao.includes(busca) ||
         d.tipo.toLowerCase().includes(busca.toLowerCase())
       const matchTipo = tipoFiltro === '' || d.tipo === tipoFiltro
-      return matchBusca && matchTipo
+      const matchAno = anoFiltro === '' || String(new Date(d.data_edicao).getFullYear()) === anoFiltro
+      return matchBusca && matchTipo && matchAno
     })
+    .sort((a, b) => new Date(b.data_edicao).getTime() - new Date(a.data_edicao).getTime())
     .sort((a, b) => {
       const dataA = new Date(a.data_edicao).getTime()
       const dataB = new Date(b.data_edicao).getTime()
@@ -58,6 +63,14 @@ export default function DiarioPage() {
           <option value="">Todos os tipos</option>
           {tipos.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
+        <select
+          value={anoFiltro}
+          onChange={e => setAnoFiltro(e.target.value)}
+          className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+        >
+          <option value="">Todos os anos</option>
+          {anos.map(ano => <option key={ano} value={ano}>{ano}</option>)}
+        </select>
       </div>
 
       {/* Tabela */}
@@ -75,31 +88,48 @@ export default function DiarioPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtrados.map(d => (
-                <tr key={d.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-gray-800">#{d.edicao}</td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {new Date(d.data_edicao).toLocaleDateString('pt-BR')}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{d.tipo}</td>
-                  <td className="px-4 py-3 text-right text-gray-800 font-medium">
-                    {d.paginas?.toLocaleString('pt-BR') ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <StatusBadge status={d.status} />
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <a
-                      href={d.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs"
-                    >
-                      <ExternalLink size={13} /> Abrir
-                    </a>
-                  </td>
-                </tr>
-              ))}
+              {filtrados.map((d, index) => {
+                const anoAtual = new Date(d.data_edicao).getFullYear()
+                const anoAnterior = index > 0
+                  ? new Date(filtrados[index - 1].data_edicao).getFullYear()
+                  : null
+                const mostrarSeparadorAno = anoAtual !== anoAnterior
+
+                return (
+                  <Fragment key={`${d.id}-${d.data_edicao}-${d.tipo}`}>
+                    {mostrarSeparadorAno && (
+                      <tr className="bg-gray-50">
+                        <td colSpan={6} className="px-4 py-2 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                          Ano {anoAtual}
+                        </td>
+                      </tr>
+                    )}
+                    <tr className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-medium text-gray-800">#{d.edicao}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {new Date(d.data_edicao).toLocaleDateString('pt-BR')}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{d.tipo}</td>
+                      <td className="px-4 py-3 text-right text-gray-800 font-medium">
+                        {d.paginas?.toLocaleString('pt-BR') ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <StatusBadge status={d.status} />
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <a
+                          href={d.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs"
+                        >
+                          <ExternalLink size={13} /> Abrir
+                        </a>
+                      </td>
+                    </tr>
+                  </Fragment>
+                )
+              })}
               {filtrados.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">
