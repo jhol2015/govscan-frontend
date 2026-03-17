@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { diarioService } from '../services/diarioService'
-import type { Diario, SincronizarResponse } from '../types'
+import type { Diario, SincronizacaoProgresso, SincronizarResponse } from '../types'
 import { RefreshCw, CheckCircle, XCircle, Download, FileWarning } from 'lucide-react'
 
 type SyncProgress = {
@@ -63,6 +63,7 @@ export default function SincronizarPage() {
   const [resultado, setResultado] = useState<SincronizarResponse | null>(null)
   const [erro, setErro]           = useState<string | null>(null)
   const [progress, setProgress]   = useState<SyncProgress>({ total: 0, ok: 0, error: 0, pending: 0, progress: 0 })
+  const [syncStatus, setSyncStatus] = useState<SincronizacaoProgresso['status']>('idle')
   const [pendentes, setPendentes] = useState<Diario[]>([])
   const [falhas, setFalhas]       = useState<SyncFailure[]>([])
   const [logs, setLogs]           = useState<SyncLogEntry[]>([])
@@ -191,43 +192,43 @@ export default function SincronizarPage() {
   async function updateProgressSnapshot(portalAtual: string, anoAtual: number, logId?: string) {
     const diarios = await carregarDiariosDoPortalAno(portalAtual, anoAtual)
     const pendingItems = diarios.filter(item => item.status === 'pending')
-    const okCount = diarios.filter(item => item.status === 'ok').length
-    const errorCount = diarios.filter(item => item.status === 'error').length
-    const totalCount = diarios.length
-    const doneCount = okCount + errorCount
-    const progressValue = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0
-
-    const nextProgress: SyncProgress = {
-      total: totalCount,
-      ok: okCount,
-      error: errorCount,
-      pending: pendingItems.length,
-      progress: progressValue,
-    }
-
     const failures = buildFailures(diarios)
-    setProgress(nextProgress)
     setPendentes(pendingItems.slice(0, 8))
     setFalhas(failures)
+
+    return {
+      failures,
+    }
+  }
+
+  async function updateBackendProgress(portalAtual: string, anoAtual: number, logId?: string) {
+    const snapshot = await diarioService.progressoSincronizacao(portalAtual, anoAtual)
+    const nextProgress: SyncProgress = {
+      total: snapshot.total,
+      ok: snapshot.ok,
+      error: snapshot.erros,
+      pending: snapshot.pendentes,
+      progress: snapshot.progresso,
+    }
+
+    setSyncStatus(snapshot.status)
+    setProgress(nextProgress)
 
     if (logId) {
       updateLog(logId, current => ({
         ...current,
         progress: nextProgress,
-        failures,
       }))
-    }
-
-    return {
-      progress: nextProgress,
-      failures,
     }
   }
 
   function startPolling(portalAtual: string, anoAtual: number, logId: string) {
     stopPolling()
     pollingRef.current = window.setInterval(() => {
-      void updateProgressSnapshot(portalAtual, anoAtual, logId)
+      void Promise.all([
+        updateBackendProgress(portalAtual, anoAtual, logId),
+        updateProgressSnapshot(portalAtual, anoAtual, logId),
+      ])
     }, POLLING_INTERVAL_MS)
   }
 
@@ -435,6 +436,7 @@ export default function SincronizarPage() {
     setLoading(true)
     setResultado(null)
     setErro(null)
+    setSyncStatus('running')
     setProgress(initialLog.progress)
     setPendentes([])
     setFalhas([])
@@ -442,12 +444,18 @@ export default function SincronizarPage() {
     setLogs(prev => [initialLog, ...prev].slice(0, 20))
 
     try {
-      await updateProgressSnapshot(portal, ano, logId)
+      await Promise.all([
+        updateBackendProgress(portal, ano, logId),
+        updateProgressSnapshot(portal, ano, logId),
+      ])
       startPolling(portal, ano, logId)
 
       const res = await diarioService.sincronizar(portal, ano)
       stopPolling()
-      await updateProgressSnapshot(portal, ano, logId)
+      await Promise.all([
+        updateBackendProgress(portal, ano, logId),
+        updateProgressSnapshot(portal, ano, logId),
+      ])
       setResultado(res)
 
       updateLog(logId, current => ({
@@ -460,7 +468,10 @@ export default function SincronizarPage() {
       }))
     } catch (error) {
       stopPolling()
-      await updateProgressSnapshot(portal, ano, logId)
+      await Promise.all([
+        updateBackendProgress(portal, ano, logId),
+        updateProgressSnapshot(portal, ano, logId),
+      ])
       const reason = error instanceof Error ? error.message : 'UNKNOWN_SYNC_ERROR'
       setErro(
         reason === 'SYNC_TIMEOUT'
@@ -481,8 +492,10 @@ export default function SincronizarPage() {
 
   const anosDisponiveis = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i)
   const retryTone = retrySummary ? getRetryTone(retrySummary) : null
-  const displayProgress = loading ? Math.min(progress.progress, 99) : progress.progress
-  const isFinalizando = loading && progress.total > 0 && progress.pending === 0 && progress.progress === 100
+  const displayProgress = loading && syncStatus === 'running'
+    ? Math.min(progress.progress, 99)
+    : progress.progress
+  const isFinalizando = loading && syncStatus !== 'running'
   const showEmAndamento = pendentes.length > 0 || (loading && progress.pending > 0)
 
   return (
@@ -542,12 +555,12 @@ export default function SincronizarPage() {
             <div className="flex items-center justify-between text-xs text-gray-600">
               <span>
                 {isFinalizando
-                  ? 'Finalizando sincronização...'
+                  ? 'Sincronização em execução no backend...'
                   : loading
                     ? 'Processando sincronização...'
                     : 'Último progresso'}
               </span>
-              <span>{displayProgress}%</span>
+              <span>{`${displayProgress}%`}</span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div

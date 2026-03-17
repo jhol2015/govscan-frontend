@@ -1,6 +1,10 @@
 import axios from "axios";
 import api from "./api";
-import type { DiarioListResponse, SincronizarResponse } from "../types";
+import type {
+  DiarioListResponse,
+  SincronizacaoProgresso,
+  SincronizarResponse,
+} from "../types";
 
 function isMissingEndpoint(error: unknown): boolean {
   const status = (error as { response?: { status?: number } })?.response
@@ -42,6 +46,16 @@ export const diarioService = {
       }
       throw error;
     }
+  },
+
+  async progressoSincronizacao(
+    portal: string,
+    ano: number,
+  ): Promise<SincronizacaoProgresso> {
+    const { data } = await api.get("/api/v1/diarios/sincronizar/progresso", {
+      params: { portal, ano },
+    });
+    return data;
   },
 
   async reprocessarFalhas(ids: number[]): Promise<SincronizarResponse> {

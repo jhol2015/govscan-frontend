@@ -25,3 +25,16 @@ export interface SincronizarResponse {
   salvos: number
   erros:  number
 }
+
+export interface SincronizacaoProgresso {
+  portal: string
+  ano: number
+  total: number
+  processados: number
+  ok: number
+  erros: number
+  pendentes: number
+  progresso: number
+  status: 'idle' | 'running' | 'completed' | 'failed'
+  mensagem?: string | null
+}
